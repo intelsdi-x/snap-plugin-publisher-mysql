@@ -42,7 +42,7 @@ import (
 
 const (
 	name            = "mysql"
-	version         = 8
+	version         = 9
 	pluginType      = plugin.PublisherPluginType
 	usernameDefault = "root"
 	passwordDefault = "root"
@@ -51,7 +51,7 @@ const (
 
 	databaseDefault = "SNAP_TEST"
 	tableDefault    = "info"
-	tableColumns    = "(timestamp VARCHAR(200), source_column VARCHAR(200), key_column VARCHAR(200), value_column VARCHAR(200))"
+	tableColumns    = "(id int(11) NOT NULL AUTO_INCREMENT,timestamp VARCHAR(200), source_column VARCHAR(200), key_column VARCHAR(200), value_column VARCHAR(200), save_time datetime DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (`id`))"
 )
 
 type mysqlPublisher struct {
@@ -90,14 +90,17 @@ func (s *mysqlPublisher) Publish(contentType string, content []byte, cfg map[str
 		value, err := interfaceToString(m.Data())
 		if err != nil {
 			logger.Printf("Error: Cannot convert incoming data to string, err=%v", err)
+                        s.db.Close()
 			return err
 		}
 		_, err = s.dbInsertStmt.Exec(m.Timestamp(), m.Tags()[core.STD_TAG_PLUGIN_RUNNING_ON], key, value)
 		if err != nil {
 			logger.Printf("Error: Cannot publish incoming metric to mysql db, err=%v", err)
+                        s.db.Close()
 			return err
 		}
 	}
+        s.db.Close()
 	return nil
 }
 
@@ -184,7 +187,7 @@ func (s *mysqlPublisher) init(cfg map[string]ctypes.ConfigValue) error {
 	}
 
 	// Put the values into the database with the current time
-	s.dbInsertStmt, err = s.db.Prepare("INSERT INTO" + " " + cfg["tablename"].(ctypes.ConfigValueStr).Value + " VALUES( ?, ?, ?, ? )")
+	s.dbInsertStmt, err = s.db.Prepare("INSERT INTO" + " " + cfg["tablename"].(ctypes.ConfigValueStr).Value + " (timestamp, source_column, key_column, value_column) VALUES( ?, ?, ?, ? )")
 	if err != nil {
 		fmt.Printf("Error: cannot prepare insert db statement, err=%v", err)
 		return err
@@ -231,6 +234,9 @@ func interfaceToString(face interface{}) (string, error) {
 			ret += ", "
 			ret += strconv.Itoa(val[i])
 		}
+	case int64:
+		ret = strconv.FormatInt(val, 10)
+
 	case int:
 		ret = strconv.Itoa(val)
 	case []uint:
@@ -285,3 +291,4 @@ func interfaceToString(face interface{}) (string, error) {
 	}
 	return ret, err
 }
+
